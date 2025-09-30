@@ -1,7 +1,8 @@
 streamlit
 opencv-python
-pillow
 pytesseract
+pillow
+numpy
 pandas
 gspread
 oauth2client
