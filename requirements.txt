@@ -1,0 +1,7 @@
+streamlit
+opencv-python
+pillow
+pytesseract
+pandas
+gspread
+oauth2client
