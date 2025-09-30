@@ -8,9 +8,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # -----------------------------
-# Owner mode (PIN)
+# Page Setup
 # -----------------------------
 st.set_page_config(page_title="AQI / PM Bar Reader", layout="wide")
+
+# -----------------------------
+# Owner mode (PIN)
+# -----------------------------
+OWNER_PIN = "1234"  # 🔑 Your PIN
 
 if "owner_ok" not in st.session_state:
     st.session_state["owner_ok"] = False
@@ -19,16 +24,15 @@ with st.sidebar:
     st.header("🔐 Owner Mode")
     pin_input = st.text_input("Enter Owner PIN", type="password")
     if st.button("Enable Owner Mode"):
-        expected = st.secrets.get("OWNER_PIN", "")
-        if pin_input and pin_input == expected:
+        if pin_input == OWNER_PIN:
             st.session_state["owner_ok"] = True
-            st.success("Owner mode enabled")
+            st.success("✅ Owner mode enabled")
         else:
-            st.error("Wrong PIN")
+            st.error("❌ Wrong PIN")
     st.caption("Only the owner can save to Google Sheets.")
 
 # -----------------------------
-# Google Sheets Setup (from secrets)
+# Google Sheets Setup
 # -----------------------------
 SHEET_ID = st.secrets.get("SHEET_ID", "")
 GCP_SA = st.secrets.get("gcp_service_account", None)
@@ -64,7 +68,7 @@ def generate_hours(values, start_datetime):
     return [(start_datetime + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M") for i in range(len(values))]
 
 # -----------------------------
-# Processing UI block (side-by-side)
+# Processing UI block
 # -----------------------------
 def process(upload, label, sheet_name, is_hourly=False):
     col_upload, col_result = st.columns([1,2])
@@ -141,9 +145,4 @@ process(hourly_aqi, "Hourly AQI", "Aqi hourly", is_hourly=True)
 
 st.markdown("---")
 daily_pm   = st.file_uploader("📂 Upload Daily PM2.5", ["jpg","jpeg","png"], key="d_pm")
-process(daily_pm, "Daily PM2.5", "Pm daily", is_hourly=False)
-
-st.markdown("---")
-hourly_pm  = st.file_uploader("📂 Upload Hourly PM2.5",["jpg","jpeg","png"], key="h_pm")
-process(hourly_pm, "Hourly PM2.5", "Pm hourly", is_hourly=True)
- 
+process(daily
