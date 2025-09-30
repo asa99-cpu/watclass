@@ -13,40 +13,36 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="AQI / PM Bar Reader", layout="wide")
 
 # -----------------------------
-# Google Sheets Setup
 # -----------------------------
+# Google Sheets Setup (use google-auth via gspread helper)
+# -----------------------------
+import gspread
+
 SHEET_ID = st.secrets.get("SHEET_ID", "")
-GCP_SA = st.secrets.get("gcp_service_account", None)
 
 def get_gsheet():
-    if not SHEET_ID or not GCP_SA:
+    if not SHEET_ID or "gcp_service_account" not in st.secrets:
         raise RuntimeError("SHEET_ID or gcp_service_account missing in Streamlit secrets.")
 
-    scopes = [
+    # Use gspread's built-in helper with google-auth (robust on Streamlit Cloud)
+    scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_info(GCP_SA, scopes=scopes)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SHEET_ID)
+    gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"], scopes=scope)
+    return gc.open_by_key(SHEET_ID)
 
 def ensure_worksheet(book, name):
     try:
-        ws = book.worksheet(name)
+        return book.worksheet(name)
     except gspread.exceptions.WorksheetNotFound:
-        ws = book.add_worksheet(title=name, rows="200", cols="50")
-    return ws
+        return book.add_worksheet(title=name, rows="200", cols="50")
 
 def write_to_sheet(sheet_name, rows, header):
-    try:
-        book = get_gsheet()
-        ws = ensure_worksheet(book, sheet_name)
-        ws.clear()
-        ws.update([header] + rows)
-        return True
-    except Exception as e:
-        st.error("❌ Google Sheets write failed: " + str(e))
-        return False
+    book = get_gsheet()
+    ws = ensure_worksheet(book, sheet_name)
+    ws.clear()
+    ws.update([header] + rows)
 
 # -----------------------------
 # Date/Time Generators
