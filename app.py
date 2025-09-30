@@ -145,4 +145,8 @@ process(hourly_aqi, "Hourly AQI", "Aqi hourly", is_hourly=True)
 
 st.markdown("---")
 daily_pm   = st.file_uploader("📂 Upload Daily PM2.5", ["jpg","jpeg","png"], key="d_pm")
-process(daily
+process(daily_pm, "Daily PM2.5", "Pm daily", is_hourly=False)
+
+st.markdown("---")
+hourly_pm  = st.file_uploader("📂 Upload Hourly PM2.5",["jpg","jpeg","png"], key="h_pm")
+process(hourly_pm, "Hourly PM2.5", "Pm hourly", is_hourly=True)
