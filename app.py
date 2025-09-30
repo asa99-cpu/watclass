@@ -5,31 +5,12 @@ from datetime import datetime, timedelta
 from detection import detect_and_measure
 
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # -----------------------------
 # Page Setup
 # -----------------------------
 st.set_page_config(page_title="AQI / PM Bar Reader", layout="wide")
-
-# -----------------------------
-# Owner mode (PIN)
-# -----------------------------
-OWNER_PIN = "1234"  # 🔑 Your PIN
-
-if "owner_ok" not in st.session_state:
-    st.session_state["owner_ok"] = False
-
-with st.sidebar:
-    st.header("🔐 Owner Mode")
-    pin_input = st.text_input("Enter Owner PIN", type="password")
-    if st.button("Enable Owner Mode"):
-        if pin_input == OWNER_PIN:
-            st.session_state["owner_ok"] = True
-            st.success("✅ Owner mode enabled")
-        else:
-            st.error("❌ Wrong PIN")
-    st.caption("Only the owner can save to Google Sheets.")
 
 # -----------------------------
 # Google Sheets Setup
@@ -40,8 +21,12 @@ GCP_SA = st.secrets.get("gcp_service_account", None)
 def get_gsheet():
     if not SHEET_ID or not GCP_SA:
         raise RuntimeError("SHEET_ID or gcp_service_account missing in Streamlit secrets.")
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GCP_SA, scope)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(GCP_SA, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open_by_key(SHEET_ID)
 
@@ -53,10 +38,15 @@ def ensure_worksheet(book, name):
     return ws
 
 def write_to_sheet(sheet_name, rows, header):
-    book = get_gsheet()
-    ws = ensure_worksheet(book, sheet_name)
-    ws.clear()
-    ws.update([header] + rows)
+    try:
+        book = get_gsheet()
+        ws = ensure_worksheet(book, sheet_name)
+        ws.clear()
+        ws.update([header] + rows)
+        return True
+    except Exception as e:
+        st.error("❌ Google Sheets write failed: " + str(e))
+        return False
 
 # -----------------------------
 # Date/Time Generators
@@ -116,24 +106,21 @@ def process(upload, label, sheet_name, is_hourly=False):
 
         st.dataframe(df, use_container_width=True)
 
-        # Save button ONLY for owner
-        if st.session_state["owner_ok"]:
-            if st.button(f"💾 Save {label} to Google Sheets"):
-                if is_hourly:
-                    rows = [[t, v] for t, v in zip(times, values)]
-                    write_to_sheet(sheet_name, rows, ["Time & Date", "Value"])
-                else:
-                    rows = [[d, v] for d, v in zip(dates, values)]
-                    write_to_sheet(sheet_name, rows, ["Date", "Value"])
+        if st.button(f"💾 Save {label} to Google Sheets"):
+            if is_hourly:
+                rows = [[t, v] for t, v in zip(times, values)]
+                ok = write_to_sheet(sheet_name, rows, ["Time & Date", "Value"])
+            else:
+                rows = [[d, v] for d, v in zip(dates, values)]
+                ok = write_to_sheet(sheet_name, rows, ["Date", "Value"])
+            if ok:
                 st.success(f"✅ Saved {len(values)} rows to {sheet_name}")
-        else:
-            st.info("Saving is disabled for public users. Owner: enable with PIN in sidebar.")
 
 # -----------------------------
 # Main UI
 # -----------------------------
 st.title("📊 AQI / PM Bar Reader Dashboard")
-st.caption("Upload AQI / PM images ➝ detect bars ➝ align with axis labels ➝ (Owner-only) save results to Google Sheets")
+st.caption("Upload AQI / PM images ➝ detect bars ➝ align with axis labels ➝ save results to Google Sheets")
 
 st.markdown("---")
 daily_aqi  = st.file_uploader("📂 Upload Daily AQI",   ["jpg","jpeg","png"], key="d_aqi")
