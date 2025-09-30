@@ -2,35 +2,44 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from datetime import datetime, timedelta
-from detection import detect_and_measure
+import json
+import os
 
 import gspread
-from google.oauth2.service_account import Credentials
+from detection import detect_and_measure
 
-# -----------------------------
-# Page Setup
-# -----------------------------
 st.set_page_config(page_title="AQI / PM Bar Reader", layout="wide")
 
 # -----------------------------
+# Google Sheets helpers
 # -----------------------------
-# Google Sheets Setup (use google-auth via gspread helper)
-# -----------------------------
-import gspread
-
-SHEET_ID = st.secrets.get("SHEET_ID", "")
+def _load_service_account_dict():
+    """
+    Try Streamlit secrets first, then fall back to local google_credentials.json
+    when running in Codespaces/local.
+    """
+    if "gcp_service_account" in st.secrets:
+        return dict(st.secrets["gcp_service_account"])
+    # Fallback: local JSON file for dev
+    if os.path.exists("google_credentials.json"):
+        with open("google_credentials.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    raise RuntimeError("No service-account credentials found (secrets or google_credentials.json).")
 
 def get_gsheet():
-    if not SHEET_ID or "gcp_service_account" not in st.secrets:
-        raise RuntimeError("SHEET_ID or gcp_service_account missing in Streamlit secrets.")
+    sheet_id = st.secrets.get("SHEET_ID", "")
+    if not sheet_id:
+        raise RuntimeError("SHEET_ID missing in Streamlit secrets.")
 
-    # Use gspread's built-in helper with google-auth (robust on Streamlit Cloud)
-    scope = [
+    sa_dict = _load_service_account_dict()
+
+    # Use gspread + google-auth (robust on Streamlit Cloud)
+    scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"], scopes=scope)
-    return gc.open_by_key(SHEET_ID)
+    gc = gspread.service_account_from_dict(sa_dict, scopes=scopes)
+    return gc.open_by_key(sheet_id)
 
 def ensure_worksheet(book, name):
     try:
@@ -45,7 +54,7 @@ def write_to_sheet(sheet_name, rows, header):
     ws.update([header] + rows)
 
 # -----------------------------
-# Date/Time Generators
+# Date/Time generators
 # -----------------------------
 def generate_dates(values, start_date):
     return [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(len(values))]
@@ -54,7 +63,7 @@ def generate_hours(values, start_datetime):
     return [(start_datetime + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M") for i in range(len(values))]
 
 # -----------------------------
-# Processing UI block
+# UI block
 # -----------------------------
 def process(upload, label, sheet_name, is_hourly=False):
     col_upload, col_result = st.columns([1,2])
@@ -102,21 +111,24 @@ def process(upload, label, sheet_name, is_hourly=False):
 
         st.dataframe(df, use_container_width=True)
 
+        # Save button (no PIN)
         if st.button(f"💾 Save {label} to Google Sheets"):
-            if is_hourly:
-                rows = [[t, v] for t, v in zip(times, values)]
-                ok = write_to_sheet(sheet_name, rows, ["Time & Date", "Value"])
-            else:
-                rows = [[d, v] for d, v in zip(dates, values)]
-                ok = write_to_sheet(sheet_name, rows, ["Date", "Value"])
-            if ok:
+            try:
+                if is_hourly:
+                    rows = [[t, v] for t, v in zip(times, values)]
+                    write_to_sheet(sheet_name, rows, ["Time & Date", "Value"])
+                else:
+                    rows = [[d, v] for d, v in zip(dates, values)]
+                    write_to_sheet(sheet_name, rows, ["Date", "Value"])
                 st.success(f"✅ Saved {len(values)} rows to {sheet_name}")
+            except Exception as e:
+                st.error(f"❌ Google Sheets write failed: {e}")
 
 # -----------------------------
 # Main UI
 # -----------------------------
 st.title("📊 AQI / PM Bar Reader Dashboard")
-st.caption("Upload AQI / PM images ➝ detect bars ➝ align with axis labels ➝ save results to Google Sheets")
+st.caption("Upload AQI / PM images ➝ detect bars ➝ align with axis labels ➝ save to Google Sheets")
 
 st.markdown("---")
 daily_aqi  = st.file_uploader("📂 Upload Daily AQI",   ["jpg","jpeg","png"], key="d_aqi")
