@@ -1,11 +1,10 @@
 streamlit
-opencv-python
-pytesseract
-pillow
+opencv-python-headless
 numpy
 pandas
-gspread
+pillow
+pytesseract
 gspread
 google-auth
-google-auth-oauthlib
 google-auth-httplib2
+google-auth-oauthlib
